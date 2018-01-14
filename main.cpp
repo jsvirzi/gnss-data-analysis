@@ -79,6 +79,8 @@ constexpr double kLonCalibration = 111120.0;
 int main(int argc, char **argv) {
     uint64_t timestamp;
     double lat, lat_sigma, lon, lon_sigma, alt, alt_sigma;
+    std::ifstream *ifs;
+    std::vector<double> *v_lat, *v_lon, *v_alt, *v_lat_sigma, *v_lon_sigma, *v_alt_sigma;
 
     TApplication the_app("analysis", 0, 0);
 
@@ -86,13 +88,18 @@ int main(int argc, char **argv) {
     std::string iGpsFileIpl = "/home/ubuntu/data/analysis/gps_parsed.csv";
     std::ifstream ifstream_ego;
     ifstream_ego.open(iGpsFileIpl);
-    if (ifstream_ego.is_open() == false) {
+    ifs = &ifstream_ego;
+    if (ifs->is_open() == false) {
         printf("boo hoo\n");
+        return 1;
     }
 
+    std::vector<double> v_ego_lat, v_ego_lon, v_ego_alt, v_ego_lat_sigma, v_ego_lon_sigma, v_ego_alt_sigma;
+    v_lat = &v_ego_lat; v_lat_sigma = &v_ego_lat_sigma;
+    v_lon = &v_ego_lon; v_lon_sigma = &v_ego_lon_sigma;
+    v_alt = &v_ego_alt; v_alt_sigma = &v_ego_alt_sigma;
     int n_gps_ego = 0;
-
-    for (std::string line; std::getline(ifstream_ego, line);) {
+    for (std::string line; std::getline(*ifs, line);) {
         std::vector<std::string> fields = splitFields(std::string(line), ",");
         sscanf(fields[EgoTimestampCsvIndex].c_str(), "%lu", &timestamp);
         sscanf(fields[EgoTimestampLatIndex].c_str(), "%lf", &lat);
@@ -101,6 +108,8 @@ int main(int argc, char **argv) {
         sscanf(fields[EgoTimestampLatSigmaIndex].c_str(), "%lf", &lat_sigma);
         sscanf(fields[EgoTimestampLonSigmaIndex].c_str(), "%lf", &lon_sigma);
         sscanf(fields[EgoTimestampAltSigmaIndex].c_str(), "%lf", &alt_sigma);
+        v_lat->push_back(lat);
+        v_lat_sigma->push_back(lat_sigma);
 //        printf("line = %lu %lf +/- %lf %lf +/- %lf\n", timestamp, lat, lat_sigma, lon, lon_sigma);
         ++n_gps_ego;
     }
