@@ -27,6 +27,8 @@
 #include <TFile.h>
 #include <TH1D.h>
 
+std::string data_directory = "/home/jsvirzi/projects/gnss-data-analysis/data";
+
 std::vector<std::string> splitFields(const std::string &input_string, const std::string &delimiters, int option = 0) {
     std::vector<std::string> fields;
     std::string empty_string;
@@ -81,11 +83,13 @@ int main(int argc, char **argv) {
     double lat, lat_sigma, lon, lon_sigma, alt, alt_sigma;
     std::ifstream *ifs;
     std::vector<double> *v_lat, *v_lon, *v_alt, *v_lat_sigma, *v_lon_sigma, *v_alt_sigma;
+    std::vector<uint64_t> *v_timestamp;
+    int i_gps;
 
     TApplication the_app("analysis", 0, 0);
 
     /*** read in data from out device ***/
-    std::string iGpsFileIpl = "/home/ubuntu/data/analysis/gps_parsed.csv";
+    std::string iGpsFileIpl = data_directory + "/gps_parsed.csv";
     std::ifstream ifstream_ego;
     ifstream_ego.open(iGpsFileIpl);
     ifs = &ifstream_ego;
@@ -95,10 +99,11 @@ int main(int argc, char **argv) {
     }
 
     std::vector<double> v_ego_lat, v_ego_lon, v_ego_alt, v_ego_lat_sigma, v_ego_lon_sigma, v_ego_alt_sigma;
+    std::vector<uint64_t> v_ego_timestamp;
     v_lat = &v_ego_lat; v_lat_sigma = &v_ego_lat_sigma;
     v_lon = &v_ego_lon; v_lon_sigma = &v_ego_lon_sigma;
     v_alt = &v_ego_alt; v_alt_sigma = &v_ego_alt_sigma;
-    int n_gps_ego = 0;
+    v_timestamp = &v_ego_timestamp;
     for (std::string line; std::getline(*ifs, line);) {
         std::vector<std::string> fields = splitFields(std::string(line), ",");
         sscanf(fields[EgoTimestampCsvIndex].c_str(), "%lu", &timestamp);
@@ -108,57 +113,44 @@ int main(int argc, char **argv) {
         sscanf(fields[EgoTimestampLatSigmaIndex].c_str(), "%lf", &lat_sigma);
         sscanf(fields[EgoTimestampLonSigmaIndex].c_str(), "%lf", &lon_sigma);
         sscanf(fields[EgoTimestampAltSigmaIndex].c_str(), "%lf", &alt_sigma);
-        v_lat->push_back(lat);
-        v_lat_sigma->push_back(lat_sigma);
+        v_timestamp->push_back(timestamp);
+        v_lat->push_back(lat); v_lat_sigma->push_back(lat_sigma);
+        v_lon->push_back(lon); v_lon_sigma->push_back(lon_sigma);
+        v_alt->push_back(alt); v_alt_sigma->push_back(alt_sigma);
 //        printf("line = %lu %lf +/- %lf %lf +/- %lf\n", timestamp, lat, lat_sigma, lon, lon_sigma);
-        ++n_gps_ego;
     }
 
-    printf("n = %d\n", n_gps_ego);
+    int n_gps_ego = v_timestamp->size();
+    printf("ego: n = %d\n", n_gps_ego);
 
-    uint64_t *ego_timestamp = new uint64_t [ n_gps_ego ];
-    double *ego_lat = new double [ n_gps_ego ];
-    double *ego_lon = new double [ n_gps_ego ];
-    double *ego_alt = new double [ n_gps_ego ];
-    double *ego_lat_sigma = new double [ n_gps_ego ];
-    double *ego_lon_sigma = new double [ n_gps_ego ];
-    double *ego_alt_sigma = new double [ n_gps_ego ];
+    uint64_t *ego_timestamp = v_ego_timestamp.data();
+    double *ego_lat = v_ego_lat.data();
+    double *ego_lon = v_ego_lon.data();
+    double *ego_alt = v_ego_alt.data();
+    double *ego_lat_sigma = v_ego_lat_sigma.data();
+    double *ego_lon_sigma = v_ego_lon_sigma.data();
+    double *ego_alt_sigma = v_ego_alt_sigma.data();
 
-    ifstream_ego.clear();
-    ifstream_ego.seekg(0, std::ios::beg); /* rewind */
-
-    int i_gps = 0;
-    for (std::string line; std::getline(ifstream_ego, line);++i_gps) {
-        std::vector<std::string> fields = splitFields(std::string(line), ",");
-        sscanf(fields[EgoTimestampCsvIndex].c_str(), "%lu", &timestamp);
-        sscanf(fields[EgoTimestampLatIndex].c_str(), "%lf", &lat);
-        sscanf(fields[EgoTimestampLonIndex].c_str(), "%lf", &lon);
-        sscanf(fields[EgoTimestampAltIndex].c_str(), "%lf", &alt);
-        sscanf(fields[EgoTimestampLatSigmaIndex].c_str(), "%lf", &lat_sigma);
-        sscanf(fields[EgoTimestampLonSigmaIndex].c_str(), "%lf", &lon_sigma);
-        sscanf(fields[EgoTimestampAltSigmaIndex].c_str(), "%lf", &alt_sigma);
-        ego_timestamp[i_gps] = timestamp;
-        ego_lat[i_gps] = lat * kLatCalibration;
-        ego_lon[i_gps] = lon * kLonCalibration;
-        ego_alt[i_gps] = alt;
-        ego_lat_sigma[i_gps] = lat_sigma;
-        ego_lon_sigma[i_gps] = lon_sigma;
-        ego_alt_sigma[i_gps] = alt_sigma;
-        printf("line = %lu %lf +/- %lf %lf +/- %lf\n", timestamp, lat, lat_sigma, lon, lon_sigma);
-    }
-
-    ifstream_ego.close();
+    ifs->clear(); /* we read to the end, so need to clear EOF bit and then seekg() should work */
+    ifs->seekg(0, std::ios::beg); /* rewind */
+    ifs->close();
 
     /*** read in IPA data ***/
-    std::string iGpsFileIpa = "/home/ubuntu/data/analysis/ipa_ipl_parsed.csv";
+    std::string iGpsFileIpa = data_directory + "/ipa_ipl_parsed.csv";
     std::ifstream ifstream_ipa;
     ifstream_ipa.open(iGpsFileIpa);
-    if (ifstream_ipa.is_open() == false) {
+    ifs = &ifstream_ipa;
+    if (ifs->is_open() == false) {
         printf("boo hoo\n");
+        return 1;
     }
 
-    int n_gps_ipa = 0;
-
+    std::vector<double> v_ipa_lat, v_ipa_lon, v_ipa_alt, v_ipa_lat_sigma, v_ipa_lon_sigma, v_ipa_alt_sigma;
+    std::vector<uint64_t> v_ipa_timestamp;
+    v_lat = &v_ipa_lat; v_lat_sigma = &v_ipa_lat_sigma;
+    v_lon = &v_ipa_lon; v_lon_sigma = &v_ipa_lon_sigma;
+    v_alt = &v_ipa_alt; v_alt_sigma = &v_ipa_alt_sigma;
+    v_timestamp = &v_ipa_timestamp;
     for (std::string line; std::getline(ifstream_ipa, line);) {
         std::vector<std::string> fields = splitFields(std::string(line), ",");
         sscanf(fields[IpaTimestampCsvIndex].c_str(), "%lu", &timestamp);
@@ -168,47 +160,30 @@ int main(int argc, char **argv) {
         sscanf(fields[IpaTimestampLatSigmaIndex].c_str(), "%lf", &lat_sigma);
         sscanf(fields[IpaTimestampLonSigmaIndex].c_str(), "%lf", &lon_sigma);
         sscanf(fields[IpaTimestampAltSigmaIndex].c_str(), "%lf", &alt_sigma);
+        v_timestamp->push_back(timestamp);
+        v_lat->push_back(lat); v_lat_sigma->push_back(lat_sigma);
+        v_lon->push_back(lon); v_lon_sigma->push_back(lon_sigma);
+        v_alt->push_back(alt); v_alt_sigma->push_back(alt_sigma);
 //        printf("line = %lu %lf +/- %lf %lf +/- %lf\n", timestamp, lat, lat_sigma, lon, lon_sigma);
-        ++n_gps_ipa;
     }
 
-    printf("n = %d\n", n_gps_ipa);
+    int n_gps_ipa = v_timestamp->size();
 
-    uint64_t *ipa_timestamp = new uint64_t [ n_gps_ipa ];
-    double *ipa_lat = new double [ n_gps_ipa ];
-    double *ipa_lon = new double [ n_gps_ipa ];
-    double *ipa_alt = new double [ n_gps_ipa ];
-    double *ipa_lat_sigma = new double [ n_gps_ipa ];
-    double *ipa_lon_sigma = new double [ n_gps_ipa ];
-    double *ipa_alt_sigma = new double [ n_gps_ipa ];
+    printf("ipa: n = %d\n", n_gps_ipa);
 
-    ifstream_ipa.clear();
-    ifstream_ipa.seekg(0, std::ios::beg); /* rewind */
+    uint64_t *ipa_timestamp = v_ipa_timestamp.data();
+    double *ipa_lat = v_ipa_lat.data();
+    double *ipa_lon = v_ipa_lon.data();
+    double *ipa_alt = v_ipa_alt.data();
+    double *ipa_lat_sigma = v_ipa_lat_sigma.data();
+    double *ipa_lon_sigma = v_ipa_lon_sigma.data();
+    double *ipa_alt_sigma = v_ipa_alt_sigma.data();
 
-    i_gps = 0;
-    for (std::string line; std::getline(ifstream_ipa, line);) {
-        std::vector<std::string> fields = splitFields(std::string(line), ",");
-        sscanf(fields[IpaTimestampCsvIndex].c_str(), "%lu", &timestamp);
-        sscanf(fields[IpaTimestampLatIndex].c_str(), "%lf", &lat);
-        sscanf(fields[IpaTimestampLonIndex].c_str(), "%lf", &lon);
-        sscanf(fields[IpaTimestampAltIndex].c_str(), "%lf", &alt);
-        sscanf(fields[IpaTimestampLatSigmaIndex].c_str(), "%lf", &lat_sigma);
-        sscanf(fields[IpaTimestampLonSigmaIndex].c_str(), "%lf", &lon_sigma);
-        sscanf(fields[IpaTimestampAltSigmaIndex].c_str(), "%lf", &alt_sigma);
-        ipa_timestamp[i_gps] = timestamp;
-        ipa_lat[i_gps] = lat * kLatCalibration;
-        ipa_lon[i_gps] = lon * kLonCalibration;
-        ipa_alt[i_gps] = alt;
-        ipa_lat_sigma[i_gps] = lat_sigma;
-        ipa_lon_sigma[i_gps] = lon_sigma;
-        ipa_alt_sigma[i_gps] = alt_sigma;
-        printf("line = %lu %lf +/- %lf %lf +/- %lf\n", timestamp, lat, lat_sigma, lon, lon_sigma);
-        ++i_gps;
-    }
+    ifs->clear(); /* we read to the end, so need to clear EOF bit and then seekg() should work */
+    ifs->seekg(0, std::ios::beg); /* rewind */
+    ifs->close();
 
-    ifstream_ipa.close();
-
-    /* remove offsets */
+    /* remove offsets from ego sample */
     double ego_lat_mean = 0.0, ego_lon_mean = 0.0, ego_alt_mean = 0.0;
     for (i_gps = 0; i_gps < n_gps_ego; ++i_gps) {
         ego_lat_mean += ego_lat[i_gps];
@@ -230,7 +205,7 @@ int main(int argc, char **argv) {
         time_ego[i_gps] = (double) dtime / 1000000.f;
     }
 
-    /* remove offsets */
+    /* remove offsets from ipa sample (not identical format to ego sample) */
     double ipa_lat_mean = 0.0, ipa_lon_mean = 0.0, ipa_alt_mean = 0.0;
     for (i_gps = 0; i_gps < n_gps_ipa; ++i_gps) {
         ipa_lat_mean += ipa_lat[i_gps];
@@ -252,24 +227,28 @@ int main(int argc, char **argv) {
         time_ipa[i_gps] = (double) dtime / 1000.f;
     }
 
-    double *dlat = new double [ n_gps_ego ];
-    double *ddlat = new double [ n_gps_ego ];
-    double *ddt = new double [ n_gps_ego ];
-    for (i_gps = 0; i_gps < n_gps_ego; ++i_gps) {
+    int n_gps = (n_gps_ego < n_gps_ipa) ? n_gps_ego : n_gps_ipa;
+    double *dlat = new double [ n_gps ]; /* diff between ego and ipa */
+    double *dlat_rms = new double [ n_gps ]; /* rms diff between ego and ipa */
+    double *ddt = new double [ n_gps ]; /* time errors */
+    for (i_gps = 0; i_gps < n_gps; ++i_gps) {
         dlat[i_gps] = ego_lat[i_gps] - ipa_lat[i_gps];
         double elat_ego = ego_lat_sigma[i_gps];
         double elat_ipa = ipa_lat_sigma[i_gps];
-        ddlat[i_gps] = TMath::Sqrt(elat_ego * elat_ego + elat_ipa * elat_ipa);
-        ddt[i_gps] = 0.0;
+        dlat_rms[i_gps] = TMath::Sqrt(elat_ego * elat_ego + elat_ipa * elat_ipa);
+        ddt[i_gps] = 0.0; /* zero for now */
     }
 
-    /*** get min/max ***/
+    /*** get min/max across both samples ***/
     double min_lat = 99999.0, max_lat = -999999.0;
+    double max_ego_lat_sigma = -999999.0, max_ipa_lat_sigma = -999999.0;
     for (i_gps = 0; i_gps < n_gps_ego; ++i_gps) {
         double lat = ego_lat[i_gps];
         printf("ego: %d time=%lf lat=%lf\n", i_gps, time_ego[i_gps], lat);
         if (lat > max_lat) { max_lat = lat; }
         if (lat < min_lat) { min_lat = lat; }
+        double sigma = ego_lat_sigma[i_gps];
+        if (sigma > max_ego_lat_sigma) { max_ego_lat_sigma = sigma; }
     }
 
     for (i_gps = 0; i_gps < n_gps_ipa; ++i_gps) {
@@ -277,6 +256,8 @@ int main(int argc, char **argv) {
         printf("ipa: %d time=%lf lat=%lf\n", i_gps, time_ipa[i_gps], lat);
         if (lat > max_lat) { max_lat = lat; }
         if (lat < min_lat) { min_lat = lat; }
+        double sigma = ipa_lat_sigma[i_gps];
+        if (sigma > max_ipa_lat_sigma) { max_ipa_lat_sigma = sigma; }
     }
 
     double min_dlat = 99999.0, max_dlat = -999999.0;
@@ -288,14 +269,18 @@ int main(int argc, char **argv) {
 
     printf("lat min/max = %lf/%lf\n", min_lat, max_lat);
 
+    /* graphs */
     int n_graph = n_gps_ego;
     n_graph = 200;
-    TGraphErrors *graph_dlat = new TGraphErrors(n_graph, time_ego, dlat, ddt, ddlat);
-    TGraphErrors *graph_lat_ego = new TGraphErrors(n_gps_ego, time_ego, ego_lat, ddt, ego_lat_sigma);
+    TGraphErrors *graph_dlat = new TGraphErrors(n_graph, time_ego, dlat, ddt, dlat_rms);
+    n_graph = n_gps_ego;
+//    n_graph = 200;
+    TGraphErrors *graph_lat_ego = new TGraphErrors(n_graph, time_ego, ego_lat, ddt, ego_lat_sigma);
     TGraphErrors *graph_lat_ipa = new TGraphErrors(n_gps_ipa, time_ipa, ipa_lat, ddt, ipa_lat_sigma);
-    TH1D *h_dlat = new TH1D("dlat", "dlat", n_graph, time_ego[0], time_ego[n_graph]);
+//    TH1D *h_dlat = new TH1D("dlat", "dlat", n_graph, time_ego[0], time_ego[n_graph]);
 
-    TFile fp("/home/ubuntu/data/analysis/analysis.root", "recreate");
+    std::string ofile = data_directory + "/analysis.root";
+    TFile fp(ofile.c_str(), "recreate");
     graph_dlat->Write("dlat");
     graph_lat_ego->Write("lat_ego");
     graph_lat_ipa->Write("lat_ipa");
@@ -305,13 +290,14 @@ int main(int argc, char **argv) {
     TCanvas canvas("main", "main", 1200, 800);
     TGraphErrors *graph;
 
-    graph = graph_dlat;
-    graph->SetMinimum(min_dlat);
-    graph->SetMaximum(max_dlat);
+    graph = graph_lat_ego;
+    graph->SetMinimum(min_lat - max_ego_lat_sigma);
+    graph->SetMaximum(max_lat + max_ego_lat_sigma);
     graph->SetMarkerStyle(kFullCircle);
+    graph->SetMarkerColor(kBlack);
     graph->SetFillColor(kYellow);
-    graph->SetFillStyle(kSolid);
-    graph->Draw("AP E0");
+    graph->SetFillStyle(3005);
+    graph->Draw("AL4");
 //    graph = graph_lat_ego;
 //    graph->SetMarkerStyle(kFullTriangleUp);
 //    graph->Draw("P");
