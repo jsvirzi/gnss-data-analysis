@@ -27,6 +27,7 @@
 #include <TFile.h>
 #include <TH1D.h>
 #include <TLegend.h>
+#include <TLine.h>
 
 void runExperiment();
 
@@ -56,8 +57,43 @@ double rms(double *x, int n) {
 }
 #endif
 
+void purdifyGraphs(TGraphErrors *g1, TGraphErrors *g2, double y_min, double y_max, const char *title, const char *x_title, const char *y_title) {
+    TGraphErrors *graph;
+
+    graph = g1;
+    graph->SetMinimum(y_min);
+    graph->SetMaximum(y_max);
+    graph->SetMarkerStyle(kFullCircle);
+    graph->SetMarkerColor(kBlack);
+    graph->SetFillColor(kYellow);
+    graph->SetFillStyle(3005);
+    graph->SetLineColor(kBlack);
+    graph->SetLineWidth(3.0);
+    graph->GetXaxis()->SetTitle(x_title);
+    graph->GetYaxis()->SetTitle(y_title);
+    graph->GetXaxis()->CenterTitle(kTRUE);
+    graph->GetYaxis()->CenterTitle(kTRUE);
+    graph->SetTitle(title);
+
+    graph = g2;
+    graph->SetMinimum(y_min);
+    graph->SetMaximum(y_max);
+    graph->SetMarkerStyle(kFullCircle);
+    graph->SetMarkerColor(kBlack);
+    graph->SetFillColor(kYellow);
+    graph->SetFillStyle(3005);
+    graph->SetLineColor(kRed);
+    graph->SetLineWidth(3.0);
+    graph->GetXaxis()->SetTitle(x_title);
+    graph->GetYaxis()->SetTitle(y_title);
+    graph->GetXaxis()->CenterTitle(kTRUE);
+    graph->GetYaxis()->CenterTitle(kTRUE);
+    graph->SetTitle(title);
+}
+
 void purdifyPlots(TH1D *h1, TH1D *h2, const char *title, const char *x_title) {
     TH1D *h;
+
     h = h1;
     h->SetFillColor(kYellow);
     h->SetLineColor(kBlack);
@@ -337,12 +373,9 @@ int main(int argc, char **argv) {
     printf("rms %lf(ego) %lf(ipa)\n", rms_ego, rms_ipa);
 
     /* graphs */
-    int n_graph = n_gps_ego;
-    n_graph = 200;
-    TGraphErrors *graph_dlat = new TGraphErrors(n_graph, time_ego, dlat, ddt, dlat_rms);
-    n_graph = n_gps_ego;
-//    n_graph = 200;
-    TGraphErrors *graph_lat_ego = new TGraphErrors(n_graph, time_ego, ego_lat, ddt, ego_lat_sigma);
+    int n_graph = n_gps;
+    TGraphErrors *graph_dlat = new TGraphErrors(n_gps, time_ego, dlat, ddt, dlat_rms);
+    TGraphErrors *graph_lat_ego = new TGraphErrors(n_gps_ego, time_ego, ego_lat, ddt, ego_lat_sigma);
     TGraphErrors *graph_lat_ipa = new TGraphErrors(n_gps_ipa, time_ipa, ipa_lat, ddt, ipa_lat_sigma);
 
     n_graph = 21;
@@ -355,6 +388,7 @@ int main(int argc, char **argv) {
     for (i_gps = 1; i_gps < n_gps_ego; ++i_gps) {
         double dlat = ego_lat[i_gps] - ego_lat[i_gps - 1];
         double sigma = (ego_lat_sigma[i_gps] + ego_lat_sigma[i_gps-1]) * 0.5;
+        sigma = sqrt(pow(ego_lat_sigma[i_gps], 2.0)  + pow(ego_lat_sigma[i_gps-1], 2.0));
         h_dlat_ego->Fill(dlat);
         h_dlat_pulls_ego->Fill(dlat / sigma);
         h_dlat_pulls_a_ego->Fill(dlat / rms_ego);
@@ -363,6 +397,7 @@ int main(int argc, char **argv) {
     for (i_gps = 1; i_gps < n_gps_ipa; ++i_gps) {
         double dlat = ipa_lat[i_gps] - ipa_lat[i_gps - 1];
         double sigma = (ipa_lat_sigma[i_gps] + ipa_lat_sigma[i_gps-1]) * 0.5;
+        sigma = sqrt(pow(ipa_lat_sigma[i_gps], 2.0)  + pow(ipa_lat_sigma[i_gps-1], 2.0));
         h_dlat_ipa->Fill(dlat);
         h_dlat_pulls_ipa->Fill(dlat / sigma);
         h_dlat_pulls_a_ipa->Fill(dlat / rms_ipa);
@@ -376,7 +411,7 @@ int main(int argc, char **argv) {
     fp.Write();
     fp.Close();
 
-    TCanvas canvas("main", "main", 1200, 800);
+    TCanvas *canvas = new TCanvas("main", "main", 1200, 800);
     TGraphErrors *graph;
 
     purdifyPlots(h_dlat_ipa, h_dlat_ego, "#Delta(LAT)", "distance [m]");
@@ -389,9 +424,12 @@ int main(int argc, char **argv) {
     legend->AddEntry(h_dlat_ego, "EGO", "LP");
     legend->Draw();
 
-    canvas.Draw();
-    canvas.Update();
-    canvas.WaitPrimitive();
+    canvas->Draw();
+    canvas->Update();
+    canvas->WaitPrimitive();
+
+    ofile = data_directory + "/dlat.pdf";
+    canvas->SaveAs(ofile.c_str());
 
     delete legend;
 
@@ -405,9 +443,12 @@ int main(int argc, char **argv) {
     legend->AddEntry(h_dlat_pulls_a_ego, "EGO", "LP");
     legend->Draw();
 
-    canvas.Draw();
-    canvas.Update();
-    canvas.WaitPrimitive();
+    canvas->Draw();
+    canvas->Update();
+    canvas->WaitPrimitive();
+
+    ofile = data_directory + "/dlat_pulls.pdf";
+    canvas->SaveAs(ofile.c_str());
 
     delete legend;
 
@@ -421,28 +462,61 @@ int main(int argc, char **argv) {
     legend->AddEntry(h_dlat_pulls_ego, "EGO", "LP");
     legend->Draw();
 
-    canvas.Draw();
-    canvas.Update();
-    canvas.WaitPrimitive();
+    canvas->Draw();
+    canvas->Update();
+    canvas->WaitPrimitive();
+
+    ofile = data_directory + "/dlat_pulls_a.pdf";
+    canvas->SaveAs(ofile.c_str());
 
     delete legend;
 
-    graph = graph_lat_ego;
-    graph->SetMinimum(min_lat - max_ego_lat_sigma);
-    graph->SetMaximum(max_lat + max_ego_lat_sigma);
-    graph->SetMarkerStyle(kFullCircle);
-    graph->SetMarkerColor(kBlack);
-    graph->SetFillColor(kYellow);
-    graph->SetFillStyle(3005);
-    graph->Draw("AL4");
-//    graph = graph_lat_ego;
-//    graph->SetMarkerStyle(kFullTriangleUp);
-//    graph->Draw("P");
-    canvas.Draw();
-    canvas.Update();
-    canvas.WaitPrimitive();
+    const char *x_title = "time [s]";
+    const char *y_title = "distance [m]";
+    const char *title = "#Delta(LAT)";
+    double y_min = min_lat - max_ego_lat_sigma;
+    double y_max = max_lat + max_ego_lat_sigma;
 
-    getchar();
+    canvas = new TCanvas("diff", "diff", 800, 1200);
+    TPad *pad1 = new TPad("pad1", "pad1", 0.00, 0.00, 1.00, 0.25);
+    TPad *pad2 = new TPad("pad2", "pad2", 0.00, 0.25, 1.00, 1.00);
+    pad1->Draw();
+    pad2->Draw();
+
+    purdifyGraphs(graph_lat_ipa, graph_lat_ego, y_min, y_max, title, x_title, y_title);
+
+    pad2->cd();
+    graph_lat_ipa->Draw("AL");
+    graph_lat_ego->Draw("L");
+
+    legend = new TLegend(0.45, 0.7, 0.55, 0.8);
+    legend->AddEntry(graph_lat_ipa, "IPA", "LF");
+    legend->AddEntry(graph_lat_ego, "EGO", "LP");
+    legend->Draw();
+
+    pad1->cd();
+    graph = graph_dlat;
+    graph->GetXaxis()->SetTitle("time [s]");
+    graph->GetXaxis()->CenterTitle(kTRUE);
+    graph->GetYaxis()->SetTitle("distance [m]");
+    graph->GetYaxis()->CenterTitle(kTRUE);
+    graph->SetLineColor(kYellow);
+    graph->SetLineWidth(3.0);
+    graph_dlat->Draw("AL");
+
+    n_graph = graph->GetN();
+    double x_min = graph->GetX()[0], x_max = graph->GetX()[n_graph - 1];
+    TLine *line = new TLine(x_min, 0.0, x_max, 0.0);
+    line->SetLineColor(kBlue);
+    line->SetLineWidth(3.0);
+    line->Draw();
+
+    canvas->Draw();
+    canvas->Update();
+    canvas->WaitPrimitive();
+
+    ofile = data_directory + "/lat.pdf";
+    canvas->SaveAs(ofile.c_str());
 
     return 0;
 }
@@ -468,4 +542,3 @@ void runExperiment() {
     c->Update();
     c->WaitPrimitive();
 }
-
