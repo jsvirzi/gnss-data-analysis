@@ -26,8 +26,65 @@
 #include <TMath.h>
 #include <TFile.h>
 #include <TH1D.h>
+#include <TLegend.h>
+
+void runExperiment();
+
+#if 0
+double rms(double *x, int n) {
+    double acc0 = 0.0, acc1 = 0.0, acc2 = 0.0;
+    for (int i=0;i<n;++i) {
+        double a = *x++;
+        acc0 += 1.0;
+        acc1 += a;
+        acc2 += a * a;
+    }
+    double mean = acc1 / acc0;
+    double std_dev = sqrt(fabs(acc2 / acc0 - mean * mean));
+    return std_dev;
+}
+#else
+double rms(double *x, int n) {
+    double acc0 = 0.0, acc1 = 0.0, acc2 = 0.0;
+    for (int i=1;i<n;++i) {
+        double a = x[i] - x[i-1];
+        acc0 += 1.0;
+        acc1 += a;
+        acc2 += a * a;
+    }
+    return acc2 / acc0;
+}
+#endif
+
+void purdifyPlots(TH1D *h1, TH1D *h2, const char *title, const char *x_title) {
+    TH1D *h;
+    h = h1;
+    h->SetFillColor(kYellow);
+    h->SetLineColor(kBlack);
+    h->SetLineWidth(3.0);
+    h->SetStats(kFALSE);
+    h->GetXaxis()->SetTitle(x_title);
+    h->GetYaxis()->SetTitle("arbitrary units");
+    h->GetXaxis()->CenterTitle(kTRUE);
+    h->GetYaxis()->CenterTitle(kTRUE);
+    h->SetTitle(title);
+
+    h = h2;
+    h->SetLineColor(kRed);
+    h->SetLineWidth(3.0);
+    h->SetMarkerStyle(kFullCircle);
+    h->SetMarkerColor(kRed);
+    h->SetMarkerSize(1.0);
+    h->SetStats(kFALSE);
+    h->GetXaxis()->SetTitle(x_title);
+    h->GetYaxis()->SetTitle("arbitrary units");
+    h->GetXaxis()->CenterTitle(kTRUE);
+    h->GetYaxis()->CenterTitle(kTRUE);
+    h->SetTitle(title);
+}
 
 std::string data_directory = "/home/jsvirzi/projects/gnss-data-analysis/data";
+// std::string data_directory = "/home/ubuntu/projects/gnss-data-analysis/data";
 
 std::vector<std::string> splitFields(const std::string &input_string, const std::string &delimiters, int option = 0) {
     std::vector<std::string> fields;
@@ -85,8 +142,11 @@ int main(int argc, char **argv) {
     std::vector<double> *v_lat, *v_lon, *v_alt, *v_lat_sigma, *v_lon_sigma, *v_alt_sigma;
     std::vector<uint64_t> *v_timestamp;
     int i_gps;
+    TLegend *legend;
 
     TApplication the_app("analysis", 0, 0);
+
+//    runExperiment();
 
     /*** read in data from out device ***/
     std::string iGpsFileIpl = data_directory + "/gps_parsed.csv";
@@ -113,6 +173,7 @@ int main(int argc, char **argv) {
         sscanf(fields[EgoTimestampLatSigmaIndex].c_str(), "%lf", &lat_sigma);
         sscanf(fields[EgoTimestampLonSigmaIndex].c_str(), "%lf", &lon_sigma);
         sscanf(fields[EgoTimestampAltSigmaIndex].c_str(), "%lf", &alt_sigma);
+        lat *= kLatCalibration; lon *= kLonCalibration;
         v_timestamp->push_back(timestamp);
         v_lat->push_back(lat); v_lat_sigma->push_back(lat_sigma);
         v_lon->push_back(lon); v_lon_sigma->push_back(lon_sigma);
@@ -151,7 +212,7 @@ int main(int argc, char **argv) {
     v_lon = &v_ipa_lon; v_lon_sigma = &v_ipa_lon_sigma;
     v_alt = &v_ipa_alt; v_alt_sigma = &v_ipa_alt_sigma;
     v_timestamp = &v_ipa_timestamp;
-    for (std::string line; std::getline(ifstream_ipa, line);) {
+    for (std::string line; std::getline(*ifs, line);) {
         std::vector<std::string> fields = splitFields(std::string(line), ",");
         sscanf(fields[IpaTimestampCsvIndex].c_str(), "%lu", &timestamp);
         sscanf(fields[IpaTimestampLatIndex].c_str(), "%lf", &lat);
@@ -160,6 +221,7 @@ int main(int argc, char **argv) {
         sscanf(fields[IpaTimestampLatSigmaIndex].c_str(), "%lf", &lat_sigma);
         sscanf(fields[IpaTimestampLonSigmaIndex].c_str(), "%lf", &lon_sigma);
         sscanf(fields[IpaTimestampAltSigmaIndex].c_str(), "%lf", &alt_sigma);
+        lat *= kLatCalibration; lon *= kLonCalibration;
         v_timestamp->push_back(timestamp);
         v_lat->push_back(lat); v_lat_sigma->push_back(lat_sigma);
         v_lon->push_back(lon); v_lon_sigma->push_back(lon_sigma);
@@ -244,7 +306,7 @@ int main(int argc, char **argv) {
     double max_ego_lat_sigma = -999999.0, max_ipa_lat_sigma = -999999.0;
     for (i_gps = 0; i_gps < n_gps_ego; ++i_gps) {
         double lat = ego_lat[i_gps];
-        printf("ego: %d time=%lf lat=%lf\n", i_gps, time_ego[i_gps], lat);
+//        printf("ego: %d time=%lf lat=%lf\n", i_gps, time_ego[i_gps], lat);
         if (lat > max_lat) { max_lat = lat; }
         if (lat < min_lat) { min_lat = lat; }
         double sigma = ego_lat_sigma[i_gps];
@@ -253,12 +315,14 @@ int main(int argc, char **argv) {
 
     for (i_gps = 0; i_gps < n_gps_ipa; ++i_gps) {
         double lat = ipa_lat[i_gps];
-        printf("ipa: %d time=%lf lat=%lf\n", i_gps, time_ipa[i_gps], lat);
+//        printf("ipa: %d time=%lf lat=%lf\n", i_gps, time_ipa[i_gps], lat);
         if (lat > max_lat) { max_lat = lat; }
         if (lat < min_lat) { min_lat = lat; }
         double sigma = ipa_lat_sigma[i_gps];
         if (sigma > max_ipa_lat_sigma) { max_ipa_lat_sigma = sigma; }
     }
+
+    double rms_ipa = rms(ipa_lat, n_gps_ipa);
 
     double min_dlat = 99999.0, max_dlat = -999999.0;
     for (i_gps = 0; i_gps < n_gps_ego; ++i_gps) {
@@ -267,7 +331,10 @@ int main(int argc, char **argv) {
         if (lat < min_dlat) { min_dlat = lat; }
     }
 
+    double rms_ego = rms(ego_lat, n_gps_ego);
+
     printf("lat min/max = %lf/%lf\n", min_lat, max_lat);
+    printf("rms %lf(ego) %lf(ipa)\n", rms_ego, rms_ipa);
 
     /* graphs */
     int n_graph = n_gps_ego;
@@ -277,7 +344,29 @@ int main(int argc, char **argv) {
 //    n_graph = 200;
     TGraphErrors *graph_lat_ego = new TGraphErrors(n_graph, time_ego, ego_lat, ddt, ego_lat_sigma);
     TGraphErrors *graph_lat_ipa = new TGraphErrors(n_gps_ipa, time_ipa, ipa_lat, ddt, ipa_lat_sigma);
-//    TH1D *h_dlat = new TH1D("dlat", "dlat", n_graph, time_ego[0], time_ego[n_graph]);
+
+    n_graph = 21;
+    TH1D *h_dlat_ego = new TH1D("dlat_ego", "dlat (ego)", n_graph, -1.05 * rms_ego, 1.05 * rms_ego);
+    TH1D *h_dlat_ipa = new TH1D("dlat_ipa", "dlat (ipa)", n_graph, -1.05 * rms_ipa, 1.05 * rms_ipa);
+    TH1D *h_dlat_pulls_ego = new TH1D("dlat_ego_pulls", "dlat pulls (ego)", n_graph, -1.05, 1.05);
+    TH1D *h_dlat_pulls_ipa = new TH1D("dlat_ipa_pulls", "dlat pulls (ipa)", n_graph, -1.05, 1.05);
+    TH1D *h_dlat_pulls_a_ego = new TH1D("dlat_ego_pulls_a", "dlat pulls (ego)", n_graph, -1.05, 1.05);
+    TH1D *h_dlat_pulls_a_ipa = new TH1D("dlat_ipa_pulls_a", "dlat pulls (ipa)", n_graph, -1.05, 1.05);
+    for (i_gps = 1; i_gps < n_gps_ego; ++i_gps) {
+        double dlat = ego_lat[i_gps] - ego_lat[i_gps - 1];
+        double sigma = (ego_lat_sigma[i_gps] + ego_lat_sigma[i_gps-1]) * 0.5;
+        h_dlat_ego->Fill(dlat);
+        h_dlat_pulls_ego->Fill(dlat / sigma);
+        h_dlat_pulls_a_ego->Fill(dlat / rms_ego);
+    }
+
+    for (i_gps = 1; i_gps < n_gps_ipa; ++i_gps) {
+        double dlat = ipa_lat[i_gps] - ipa_lat[i_gps - 1];
+        double sigma = (ipa_lat_sigma[i_gps] + ipa_lat_sigma[i_gps-1]) * 0.5;
+        h_dlat_ipa->Fill(dlat);
+        h_dlat_pulls_ipa->Fill(dlat / sigma);
+        h_dlat_pulls_a_ipa->Fill(dlat / rms_ipa);
+    }
 
     std::string ofile = data_directory + "/analysis.root";
     TFile fp(ofile.c_str(), "recreate");
@@ -289,6 +378,54 @@ int main(int argc, char **argv) {
 
     TCanvas canvas("main", "main", 1200, 800);
     TGraphErrors *graph;
+
+    purdifyPlots(h_dlat_ipa, h_dlat_ego, "#Delta(LAT)", "distance [m]");
+
+    h_dlat_ipa->DrawNormalized("hist");
+    h_dlat_ego->DrawNormalized("p same");
+
+    legend = new TLegend(0.7, 0.7, 0.8, 0.8);
+    legend->AddEntry(h_dlat_ipa, "IPA", "LF");
+    legend->AddEntry(h_dlat_ego, "EGO", "LP");
+    legend->Draw();
+
+    canvas.Draw();
+    canvas.Update();
+    canvas.WaitPrimitive();
+
+    delete legend;
+
+    purdifyPlots(h_dlat_pulls_a_ipa, h_dlat_pulls_a_ego, "#Delta(LAT) / RMS", "#Delta(LAT) / RMS");
+
+    h_dlat_pulls_a_ipa->DrawNormalized("hist");
+    h_dlat_pulls_a_ego->DrawNormalized("p same");
+
+    legend = new TLegend(0.7, 0.7, 0.8, 0.8);
+    legend->AddEntry(h_dlat_pulls_a_ipa, "IPA", "LF");
+    legend->AddEntry(h_dlat_pulls_a_ego, "EGO", "LP");
+    legend->Draw();
+
+    canvas.Draw();
+    canvas.Update();
+    canvas.WaitPrimitive();
+
+    delete legend;
+
+    purdifyPlots(h_dlat_pulls_ipa, h_dlat_pulls_ego, "#Delta(LAT) / #sigma", "#Delta(LAT) / #sigma");
+
+    h_dlat_pulls_ipa->DrawNormalized("hist");
+    h_dlat_pulls_ego->DrawNormalized("p same");
+
+    legend = new TLegend(0.7, 0.7, 0.8, 0.8);
+    legend->AddEntry(h_dlat_pulls_ipa, "IPA", "LF");
+    legend->AddEntry(h_dlat_pulls_ego, "EGO", "LP");
+    legend->Draw();
+
+    canvas.Draw();
+    canvas.Update();
+    canvas.WaitPrimitive();
+
+    delete legend;
 
     graph = graph_lat_ego;
     graph->SetMinimum(min_lat - max_ego_lat_sigma);
@@ -309,3 +446,26 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+
+#include <TRandom3.h>
+
+void runExperiment() {
+    double mean = 0.0;
+    double sigma = 1.0;
+    int i, n = 1000000;
+    TRandom3 rndm;
+    TH1D *hist = new TH1D("hist", "hist", 100, -5.0, 5.0);
+    double x0 = rndm.Gaus(mean, sigma);
+    for (i=0;i<n;++i) {
+        double x1 = rndm.Gaus(mean, sigma);
+        double x = x1 - x0;
+        hist->Fill(x);
+        x0 = x1;
+    }
+    TCanvas *c = new TCanvas("test", "test", 800, 600);
+    hist->Draw("hist");
+    c->Draw();
+    c->Update();
+    c->WaitPrimitive();
+}
+
