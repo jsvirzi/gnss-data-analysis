@@ -232,6 +232,8 @@ enum {
 constexpr double kLatCalibration = 88240.0;
 constexpr double kLonCalibration = 111120.0;
 
+bool verbose = false;
+
 int main(int argc, char **argv) {
     uint64_t timestamp;
     double lat, lat_sigma, lon, lon_sigma, alt, alt_sigma;
@@ -275,7 +277,9 @@ int main(int argc, char **argv) {
         v_lat->push_back(lat); v_lat_sigma->push_back(lat_sigma);
         v_lon->push_back(lon); v_lon_sigma->push_back(lon_sigma);
         v_alt->push_back(alt); v_alt_sigma->push_back(alt_sigma);
-//        printf("line = %lu %lf +/- %lf %lf +/- %lf\n", timestamp, lat, lat_sigma, lon, lon_sigma);
+        if (verbose) {
+            printf("line = %lu %lf +/- %lf %lf +/- %lf\n", timestamp, lat, lat_sigma, lon, lon_sigma);
+        }
     }
 
     int n_gps_ego = v_timestamp->size();
@@ -316,7 +320,9 @@ int main(int argc, char **argv) {
         v_lat->push_back(lat); v_lat_sigma->push_back(lat_sigma);
         v_lon->push_back(lon); v_lon_sigma->push_back(lon_sigma);
         v_alt->push_back(alt); v_alt_sigma->push_back(alt_sigma);
-//        printf("line = %lu %lf +/- %lf %lf +/- %lf\n", timestamp, lat, lat_sigma, lon, lon_sigma);
+        if (verbose) {
+            printf("line = %lu %lf +/- %lf %lf +/- %lf\n", timestamp, lat, lat_sigma, lon, lon_sigma);
+        }
     }
 
     int n_gps_ipa = v_timestamp->size();
@@ -455,23 +461,39 @@ int main(int argc, char **argv) {
         time_ipa[i_gps - time_offset_ipa_start] = (double) dtime;
     }
 
+    double *ddt = new double [ n_gps ]; /* time errors */
+    for (i_gps = 0; i_gps < n_gps; ++i_gps) {
+        ddt[i_gps] = 0.0; /* zero for now */
+    }
+
     double *dlat = new double [ n_gps ]; /* diff between ego and ipa */
     double *dlat_rms = new double [ n_gps ]; /* rms diff between ego and ipa */
-    double *ddt = new double [ n_gps ]; /* time errors */
     for (i_gps = 0; i_gps < n_gps; ++i_gps) {
         dlat[i_gps] = ego_lat[i_gps] - ipa_lat[i_gps];
         double elat_ego = ego_lat_sigma[i_gps];
         double elat_ipa = ipa_lat_sigma[i_gps];
         dlat_rms[i_gps] = TMath::Sqrt(elat_ego * elat_ego + elat_ipa * elat_ipa);
-        ddt[i_gps] = 0.0; /* zero for now */
+    }
+
+    double *dlon = new double [ n_gps ]; /* diff between ego and ipa */
+    double *dlon_rms = new double [ n_gps ]; /* rms diff between ego and ipa */
+    for (i_gps = 0; i_gps < n_gps; ++i_gps) {
+        dlon[i_gps] = ego_lon[i_gps] - ipa_lon[i_gps];
+        double elon_ego = ego_lon_sigma[i_gps];
+        double elon_ipa = ipa_lon_sigma[i_gps];
+        dlon_rms[i_gps] = TMath::Sqrt(elon_ego * elon_ego + elon_ipa * elon_ipa);
     }
 
     /*** get min/max across both samples ***/
+
+    /* LATITUDE */
     double min_lat = 99999.0, max_lat = -999999.0;
     double max_ego_lat_sigma = -999999.0, max_ipa_lat_sigma = -999999.0;
     for (i_gps = 0; i_gps < n_gps; ++i_gps) {
         double lat = ego_lat[i_gps];
-//        printf("ego: %d time=%lf lat=%lf\n", i_gps, time_ego[i_gps], lat);
+        if (verbose) {
+            printf("ego: %d time=%lf lat=%lf\n", i_gps, time_ego[i_gps], lat);
+        }
         if (lat > max_lat) { max_lat = lat; }
         if (lat < min_lat) { min_lat = lat; }
         double sigma = ego_lat_sigma[i_gps];
@@ -480,14 +502,16 @@ int main(int argc, char **argv) {
 
     for (i_gps = 0; i_gps < n_gps; ++i_gps) {
         double lat = ipa_lat[i_gps];
-//        printf("ipa: %d time=%lf lat=%lf\n", i_gps, time_ipa[i_gps], lat);
+        if (verbose) {
+            printf("ipa: %d time=%lf lat=%lf\n", i_gps, time_ipa[i_gps], lat);
+        }
         if (lat > max_lat) { max_lat = lat; }
         if (lat < min_lat) { min_lat = lat; }
         double sigma = ipa_lat_sigma[i_gps];
         if (sigma > max_ipa_lat_sigma) { max_ipa_lat_sigma = sigma; }
     }
 
-    double rms_ipa = rms(ipa_lat, n_gps);
+    double rms_ipa_lat = rms(ipa_lat, n_gps);
 
     double min_dlat = 99999.0, max_dlat = -999999.0;
     for (i_gps = 0; i_gps < n_gps; ++i_gps) {
@@ -496,10 +520,49 @@ int main(int argc, char **argv) {
         if (lat < min_dlat) { min_dlat = lat; }
     }
 
-    double rms_ego = rms(ego_lat, n_gps);
+    double rms_ego_lat = rms(ego_lat, n_gps);
 
     printf("lat min/max = %lf/%lf\n", min_lat, max_lat);
-    printf("rms %lf(ego) %lf(ipa)\n", rms_ego, rms_ipa);
+    printf("lat rms %lf(ego) %lf(ipa)\n", rms_ego_lat, rms_ipa_lat);
+
+    /* LONGITUDE */
+    double min_lon = 99999.0, max_lon = -999999.0;
+    double max_ego_lon_sigma = -999999.0, max_ipa_lon_sigma = -999999.0;
+    for (i_gps = 0; i_gps < n_gps; ++i_gps) {
+        double lon = ego_lon[i_gps];
+        if (verbose) {
+            printf("ego: %d time=%lf lon=%lf\n", i_gps, time_ego[i_gps], lon);
+        }
+        if (lon > max_lon) { max_lon = lon; }
+        if (lon < min_lon) { min_lon = lon; }
+        double sigma = ego_lon_sigma[i_gps];
+        if (sigma > max_ego_lon_sigma) { max_ego_lon_sigma = sigma; }
+    }
+
+    for (i_gps = 0; i_gps < n_gps; ++i_gps) {
+        double lon = ipa_lon[i_gps];
+        if (verbose) {
+            printf("ipa: %d time=%lf lon=%lf\n", i_gps, time_ipa[i_gps], lon);
+        }
+        if (lon > max_lon) { max_lon = lon; }
+        if (lon < min_lon) { min_lon = lon; }
+        double sigma = ipa_lon_sigma[i_gps];
+        if (sigma > max_ipa_lon_sigma) { max_ipa_lon_sigma = sigma; }
+    }
+
+    double rms_ipa_lon = rms(ipa_lon, n_gps);
+
+    double min_dlon = 99999.0, max_dlon = -999999.0;
+    for (i_gps = 0; i_gps < n_gps; ++i_gps) {
+        double lon = dlon[i_gps];
+        if (lon > max_dlon) { max_dlon = lon; }
+        if (lon < min_dlon) { min_dlon = lon; }
+    }
+
+    double rms_ego_lon = rms(ego_lon, n_gps);
+
+    printf("lon min/max = %lf/%lf\n", min_lon, max_lon);
+    printf("lon rms %lf(ego) %lf(ipa)\n", rms_ego_lon, rms_ipa_lon);
 
     /* graphs */
     TGraphErrors *graph_dlat = new TGraphErrors(n_gps, time_ego, dlat, ddt, dlat_rms);
@@ -508,32 +571,72 @@ int main(int argc, char **argv) {
     TGraph *graph_lat_sigma_ego = new TGraph(n_gps, time_ego, ego_lat_sigma);
     TGraph *graph_lat_sigma_ipa = new TGraph(n_gps, time_ipa, ipa_lat_sigma);
 
+    TGraphErrors *graph_dlon = new TGraphErrors(n_gps, time_ego, dlon, ddt, dlon_rms);
+    TGraphErrors *graph_lon_ego = new TGraphErrors(n_gps, time_ego, ego_lon, ddt, ego_lon_sigma);
+    TGraphErrors *graph_lon_ipa = new TGraphErrors(n_gps, time_ipa, ipa_lon, ddt, ipa_lon_sigma);
+    TGraph *graph_lon_sigma_ego = new TGraph(n_gps, time_ego, ego_lon_sigma);
+    TGraph *graph_lon_sigma_ipa = new TGraph(n_gps, time_ipa, ipa_lon_sigma);
+
     int n_hist = 21;
-    TH1D *h_dlat_ego = new TH1D("dlat_ego", "dlat (ego)", n_hist, -1.05 * rms_ego, 1.05 * rms_ego);
-    TH1D *h_dlat_ipa = new TH1D("dlat_ipa", "dlat (ipa)", n_hist, -1.05 * rms_ipa, 1.05 * rms_ipa);
+
+    TH1D *h_dlat_ego = new TH1D("dlat_ego", "dlat (ego)", n_hist, -1.05 * rms_ego_lat, 1.05 * rms_ego_lat);
+    TH1D *h_dlat_ipa = new TH1D("dlat_ipa", "dlat (ipa)", n_hist, -1.05 * rms_ipa_lat, 1.05 * rms_ipa_lat);
     TH1D *h_dlat_pulls_ego = new TH1D("dlat_ego_pulls", "dlat pulls (ego)", n_hist, -1.05, 1.05);
     TH1D *h_dlat_pulls_ipa = new TH1D("dlat_ipa_pulls", "dlat pulls (ipa)", n_hist, -1.05, 1.05);
     TH1D *h_dlat_pulls_a_ego = new TH1D("dlat_ego_pulls_a", "dlat pulls (ego)", n_hist, -1.05, 1.05);
     TH1D *h_dlat_pulls_a_ipa = new TH1D("dlat_ipa_pulls_a", "dlat pulls (ipa)", n_hist, -1.05, 1.05);
+
+    TH1D *h_dlon_ego = new TH1D("dlon_ego", "dlon (ego)", n_hist, -1.05 * rms_ego_lon, 1.05 * rms_ego_lon);
+    TH1D *h_dlon_ipa = new TH1D("dlon_ipa", "dlon (ipa)", n_hist, -1.05 * rms_ipa_lon, 1.05 * rms_ipa_lon);
+    TH1D *h_dlon_pulls_ego = new TH1D("dlon_ego_pulls", "dlon pulls (ego)", n_hist, -1.05, 1.05);
+    TH1D *h_dlon_pulls_ipa = new TH1D("dlon_ipa_pulls", "dlon pulls (ipa)", n_hist, -1.05, 1.05);
+    TH1D *h_dlon_pulls_a_ego = new TH1D("dlon_ego_pulls_a", "dlon pulls (ego)", n_hist, -1.05, 1.05);
+    TH1D *h_dlon_pulls_a_ipa = new TH1D("dlon_ipa_pulls_a", "dlon pulls (ipa)", n_hist, -1.05, 1.05);
+
+    /* LATITUDE */
     for (i_gps = 1; i_gps < n_gps; ++i_gps) {
         double dlat = ego_lat[i_gps] - ego_lat[i_gps - 1];
-//        double sigma = (ego_lat_sigma[i_gps] + ego_lat_sigma[i_gps-1]) * 0.5;
         double sigma = sqrt(pow(ego_lat_sigma[i_gps], 2.0)  + pow(ego_lat_sigma[i_gps-1], 2.0));
         h_dlat_ego->Fill(dlat);
         h_dlat_pulls_ego->Fill(dlat / sigma);
-        h_dlat_pulls_a_ego->Fill(dlat / rms_ego);
+        h_dlat_pulls_a_ego->Fill(dlat / rms_ego_lat);
     }
 
     for (i_gps = 1; i_gps < n_gps; ++i_gps) {
         double dlat = ipa_lat[i_gps] - ipa_lat[i_gps - 1];
-//        double sigma = (ipa_lat_sigma[i_gps] + ipa_lat_sigma[i_gps-1]) * 0.5;
         double sigma = sqrt(pow(ipa_lat_sigma[i_gps], 2.0)  + pow(ipa_lat_sigma[i_gps-1], 2.0));
         h_dlat_ipa->Fill(dlat);
         h_dlat_pulls_ipa->Fill(dlat / sigma);
-        h_dlat_pulls_a_ipa->Fill(dlat / rms_ipa);
+        h_dlat_pulls_a_ipa->Fill(dlat / rms_ipa_lat);
     }
 
-    std::string ofile = data_directory + "/analysis.root";
+    /* LONGITUDE */
+    for (i_gps = 1; i_gps < n_gps; ++i_gps) {
+        double dlon = ego_lon[i_gps] - ego_lon[i_gps - 1];
+        double sigma = sqrt(pow(ego_lon_sigma[i_gps], 2.0)  + pow(ego_lon_sigma[i_gps-1], 2.0));
+        h_dlon_ego->Fill(dlon);
+        h_dlon_pulls_ego->Fill(dlon / sigma);
+        h_dlon_pulls_a_ego->Fill(dlon / rms_ego_lon);
+    }
+
+    for (i_gps = 1; i_gps < n_gps; ++i_gps) {
+        double dlon = ipa_lon[i_gps] - ipa_lon[i_gps - 1];
+        double sigma = sqrt(pow(ipa_lon_sigma[i_gps], 2.0)  + pow(ipa_lon_sigma[i_gps-1], 2.0));
+        h_dlon_ipa->Fill(dlon);
+        h_dlon_pulls_ipa->Fill(dlon / sigma);
+        h_dlon_pulls_a_ipa->Fill(dlon / rms_ipa_lon);
+    }
+
+    std::string ofile;
+    TGraphErrors *graph;
+    TCanvas *canvas;
+    TLegend *t_legend;
+    const char *title, *x_title, *y_title;
+    double x_min, x_max, y_min, y_max;
+    TPad *pad1, *pad2;
+    TLine *line;
+
+    ofile = data_directory + "/analysis.root";
     TFile fp(ofile.c_str(), "recreate");
     graph_dlat->Write("dlat");
     graph_lat_ego->Write("lat_ego");
@@ -543,8 +646,7 @@ int main(int argc, char **argv) {
     fp.Write();
     fp.Close();
 
-    TCanvas *canvas = new TCanvas("main", "main", 1200, 800);
-    TGraphErrors *graph;
+    canvas = new TCanvas("main", "main", 1200, 800);
 
     purdifyPlots(h_dlat_ipa, h_dlat_ego, "#Delta(LAT)", "distance [m]");
 
@@ -561,6 +663,25 @@ int main(int argc, char **argv) {
     canvas->WaitPrimitive();
 
     ofile = data_directory + "/dlat.pdf";
+    canvas->SaveAs(ofile.c_str());
+
+    delete legend;
+
+    purdifyPlots(h_dlon_ipa, h_dlon_ego, "#Delta(LON)", "distance [m]");
+
+    h_dlon_ipa->DrawNormalized("hist");
+    h_dlon_ego->DrawNormalized("p same");
+
+    legend = new TLegend(0.7, 0.7, 0.8, 0.8);
+    legend->AddEntry(h_dlon_ipa, "IPA", "LF");
+    legend->AddEntry(h_dlon_ego, "EGO", "LP");
+    legend->Draw();
+
+    canvas->Draw();
+    canvas->Update();
+    canvas->WaitPrimitive();
+
+    ofile = data_directory + "/dlon.pdf";
     canvas->SaveAs(ofile.c_str());
 
     delete legend;
@@ -584,6 +705,25 @@ int main(int argc, char **argv) {
 
     delete legend;
 
+    purdifyPlots(h_dlon_pulls_a_ipa, h_dlon_pulls_a_ego, "#Delta(LON) / RMS", "#Delta(LON) / RMS");
+
+    h_dlon_pulls_a_ipa->DrawNormalized("hist");
+    h_dlon_pulls_a_ego->DrawNormalized("p same");
+
+    legend = new TLegend(0.7, 0.7, 0.8, 0.8);
+    legend->AddEntry(h_dlon_pulls_a_ipa, "IPA", "LF");
+    legend->AddEntry(h_dlon_pulls_a_ego, "EGO", "LP");
+    legend->Draw();
+
+    canvas->Draw();
+    canvas->Update();
+    canvas->WaitPrimitive();
+
+    ofile = data_directory + "/dlon_pulls.pdf";
+    canvas->SaveAs(ofile.c_str());
+
+    delete legend;
+
     purdifyPlots(h_dlat_pulls_ipa, h_dlat_pulls_ego, "#Delta(LAT) / #sigma", "#Delta(LAT) / #sigma");
 
     h_dlat_pulls_ipa->DrawNormalized("hist");
@@ -603,15 +743,35 @@ int main(int argc, char **argv) {
 
     delete legend;
 
-    const char *x_title = "time [s]";
-    const char *y_title = "distance [m]";
-    const char *title = "#Delta(LAT)";
-    double y_min = min_lat - max_ego_lat_sigma;
-    double y_max = max_lat + max_ego_lat_sigma;
+    purdifyPlots(h_dlon_pulls_ipa, h_dlon_pulls_ego, "#Delta(LON) / #sigma", "#Delta(LON) / #sigma");
 
-    canvas = new TCanvas("diff", "diff", 800, 1200);
-    TPad *pad1 = new TPad("pad1", "pad1", 0.00, 0.00, 1.00, 0.25);
-    TPad *pad2 = new TPad("pad2", "pad2", 0.00, 0.25, 1.00, 1.00);
+    h_dlon_pulls_ipa->DrawNormalized("hist");
+    h_dlon_pulls_ego->DrawNormalized("p same");
+
+    legend = new TLegend(0.7, 0.7, 0.8, 0.8);
+    legend->AddEntry(h_dlon_pulls_ipa, "IPA", "LF");
+    legend->AddEntry(h_dlon_pulls_ego, "EGO", "LP");
+    legend->Draw();
+
+    canvas->Draw();
+    canvas->Update();
+    canvas->WaitPrimitive();
+
+    ofile = data_directory + "/dlon_pulls_a.pdf";
+    canvas->SaveAs(ofile.c_str());
+
+    delete legend;
+
+    x_title = "time [s]";
+    y_title = "distance [m]";
+    title = "#Delta(LAT)";
+
+    y_min = min_lat - max_ego_lat_sigma;
+    y_max = max_lat + max_ego_lat_sigma;
+
+    canvas = new TCanvas("diff_lat", "diff_lat", 800, 1200);
+    pad1 = new TPad("pad1", "pad1", 0.00, 0.00, 1.00, 0.25);
+    pad2 = new TPad("pad2", "pad2", 0.00, 0.25, 1.00, 1.00);
     pad1->Draw();
     pad2->Draw();
 
@@ -627,7 +787,6 @@ int main(int argc, char **argv) {
     legend->Draw();
 
     pad1->cd();
-    // pad1->SetBottomMargin(0.05);
     pad1->SetTopMargin(0.0);
     graph = graph_dlat;
     graph->GetXaxis()->SetTitle("time [s]");
@@ -645,13 +804,14 @@ int main(int argc, char **argv) {
     graph_dlat_simple->Draw("L");
 
     n_hist = graph->GetN();
-    double x_min = graph->GetX()[0], x_max = graph->GetX()[n_hist - 1];
-    TLine *line = new TLine(x_min, 0.0, x_max, 0.0);
+    x_min = graph->GetX()[0];
+    x_max = graph->GetX()[n_hist - 1];
+    line = new TLine(x_min, 0.0, x_max, 0.0);
     line->SetLineColor(kRed);
     line->SetLineWidth(3.0);
     line->Draw();
 
-    TLegend *t_legend = new TLegend(0.45, 0.85, 0.55, 0.95);
+    t_legend = new TLegend(0.45, 0.85, 0.55, 0.95);
     t_legend->AddEntry(graph_dlat_simple, "IPA - EGO", "L");
     t_legend->AddEntry(line, "0", "L");
     t_legend->Draw();
@@ -666,7 +826,71 @@ int main(int argc, char **argv) {
     delete t_legend;
     delete legend;
 
-    canvas = new TCanvas("c2", "c2", 1200, 800);
+    x_title = "time [s]";
+    y_title = "distance [m]";
+    title = "#Delta(LON)";
+
+    y_min = min_lon - max_ego_lon_sigma;
+    y_max = max_lon + max_ego_lon_sigma;
+
+    canvas = new TCanvas("diff_lon", "diff_lon", 800, 1200);
+    pad1 = new TPad("pad1", "pad1", 0.00, 0.00, 1.00, 0.25);
+    pad2 = new TPad("pad2", "pad2", 0.00, 0.25, 1.00, 1.00);
+    pad1->Draw();
+    pad2->Draw();
+
+    purdifyGraphs(graph_lon_ipa, graph_lon_ego, y_min, y_max, title, x_title, y_title);
+
+    pad2->cd();
+    graph_lon_ipa->Draw("AL");
+    graph_lon_ego->Draw("L");
+
+    legend = new TLegend(0.45, 0.7, 0.55, 0.8);
+    legend->AddEntry(graph_lon_ipa, "IPA", "L");
+    legend->AddEntry(graph_lon_ego, "EGO", "L");
+    legend->Draw();
+
+    pad1->cd();
+    pad1->SetTopMargin(0.0);
+    graph = graph_dlon;
+    graph->GetXaxis()->SetTitle("time [s]");
+    graph->GetXaxis()->CenterTitle(kTRUE);
+    graph->GetYaxis()->SetTitle("distance [m]");
+    graph->GetYaxis()->CenterTitle(kTRUE);
+    graph->SetTitle("");
+    graph->SetLineColor(kYellow);
+    graph->SetLineWidth(3.0);
+    graph_dlon->Draw("AL");
+
+    TGraph *graph_dlon_simple = new TGraph(graph->GetN(), graph->GetX(), graph->GetY());
+    graph_dlon_simple->SetLineColor(kBlack);
+    graph_dlon_simple->SetLineWidth(3.0);
+    graph_dlon_simple->Draw("L");
+
+    n_hist = graph->GetN();
+    x_min = graph->GetX()[0];
+    x_max = graph->GetX()[n_hist - 1];
+    line = new TLine(x_min, 0.0, x_max, 0.0);
+    line->SetLineColor(kRed);
+    line->SetLineWidth(3.0);
+    line->Draw();
+
+    t_legend = new TLegend(0.45, 0.85, 0.55, 0.95);
+    t_legend->AddEntry(graph_dlon_simple, "IPA - EGO", "L");
+    t_legend->AddEntry(line, "0", "L");
+    t_legend->Draw();
+
+    canvas->Draw();
+    canvas->Update();
+    canvas->WaitPrimitive();
+
+    ofile = data_directory + "/lon.pdf";
+    canvas->SaveAs(ofile.c_str());
+
+    delete t_legend;
+    delete legend;
+
+    canvas = new TCanvas("c2_lat", "c2_lat", 1200, 800);
 
     y_max = getMax(graph_lat_sigma_ipa, graph_lat_sigma_ego) * 1.1; /* some headroom */
 
@@ -685,6 +909,27 @@ int main(int argc, char **argv) {
     canvas->WaitPrimitive();
 
     ofile = data_directory + "/lat_uncertainty.pdf";
+    canvas->SaveAs(ofile.c_str());
+
+    canvas = new TCanvas("c2_lon", "c2_lon", 1200, 800);
+
+    y_max = getMax(graph_lon_sigma_ipa, graph_lon_sigma_ego) * 1.1; /* some headroom */
+
+    purdifyGraphs(graph_lon_sigma_ipa, graph_lon_sigma_ego, 0.0, y_max, "Longitude Uncertainty", "time [s]", "distance [m]");
+
+    graph_lon_sigma_ipa->Draw("AL");
+    graph_lon_sigma_ego->Draw("L");
+
+    legend = new TLegend(0.45, 0.3, 0.55, 0.4);
+    legend->AddEntry(graph_lon_sigma_ipa, "IPA", "L");
+    legend->AddEntry(graph_lon_sigma_ego, "EGO", "L");
+    legend->Draw();
+
+    canvas->Draw();
+    canvas->Update();
+    canvas->WaitPrimitive();
+
+    ofile = data_directory + "/lon_uncertainty.pdf";
     canvas->SaveAs(ofile.c_str());
 
     return 0;
